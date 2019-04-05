@@ -34,13 +34,25 @@ parser.add_argument('--checkpoint_path',  type=str,   help='path to a specific c
 parser.add_argument('--input_height',     type=int,   help='input height', default=256)
 parser.add_argument('--input_width',      type=int,   help='input width', default=512)
 
-args = parser.parse_args()
+args = parser.parse_args() # Args is a <class 'argparse.Namespace'>
+#print(type(args))
+
+
+# DISP IS DEFINED IN evsluation_utils.py
+            #def load_gt_disp_kitti(path):
+            #gt_disparities = []
+            #for i in range(200):
+            #    disp = cv2.imread(path + "/training/disp_noc_0/" + str(i).zfill(6) + "_10.png", -1)
+            #    disp = disp.astype(np.float32) / 256
+            #    gt_disparities.append(disp)
+            #return gt_disparities
+
 
 def post_process_disparity(disp):
-    _, h, w = disp.shape
-    l_disp = disp[0,:,:]
-    r_disp = np.fliplr(disp[1,:,:])
-    m_disp = 0.5 * (l_disp + r_disp)
+    _, h, w = disp.shape # only cares about row col dimensions 
+    l_disp = disp[0,:,:] # Left disparity
+    r_disp = np.fliplr(disp[1,:,:]) # right disparity
+    m_disp = 0.5 * (l_disp + r_disp) # average disparity 
     l, _ = np.meshgrid(np.linspace(0, 1, w), np.linspace(0, 1, h))
     l_mask = 1.0 - np.clip(20 * (l - 0.05), 0, 1)
     r_mask = np.fliplr(l_mask)
@@ -75,19 +87,23 @@ def test_simple(params):
     restore_path = args.checkpoint_path.split(".")[0]
     train_saver.restore(sess, restore_path)
 
-    disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images})
-    disp_pp = post_process_disparity(disp.squeeze()).astype(np.float32)
+    disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images}) # disp is defined in evaluation_utils.py
 
+    # post processed image = disp_pp, see where test_simple is called
+    disp_pp = post_process_disparity(disp.squeeze()).astype(np.float32)
+    
     output_directory = os.path.dirname(args.image_path)
     output_name = os.path.splitext(os.path.basename(args.image_path))[0]
 
     np.save(os.path.join(output_directory, "{}_disp.npy".format(output_name)), disp_pp)
+
+    # disparity is converted to image and saved 
     disp_to_img = scipy.misc.imresize(disp_pp.squeeze(), [original_height, original_width])
     plt.imsave(os.path.join(output_directory, "{}_disp.png".format(output_name)), disp_to_img, cmap='plasma')
 
     print('done!')
 
-def main(_):
+def main(_): # start here
 
     params = monodepth_parameters(
         encoder=args.encoder,
@@ -104,6 +120,7 @@ def main(_):
         lr_loss_weight=0,
         full_summary=False)
 
+    # test_simple is called in main(_)
     test_simple(params)
 
 if __name__ == '__main__':
