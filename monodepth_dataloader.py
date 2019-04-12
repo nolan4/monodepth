@@ -1,10 +1,10 @@
-# Copyright UCL Business plc 2017. Patent Pending. All rights reserved. 
+# Copyright UCL Business plc 2017. Patent Pending. All rights reserved.
 #
 # The MonoDepth Software is licensed under the terms of the UCLB ACP-A licence
 # which allows for non-commercial use only, the full terms of which are made
 # available in the LICENSE file.
 #
-# For any other use of the software not covered by the UCLB ACP-A Licence, 
+# For any other use of the software not covered by the UCLB ACP-A Licence,
 # please contact info@uclb.com
 
 """Monodepth data loader.
@@ -14,7 +14,7 @@ from __future__ import absolute_import, division, print_function
 import tensorflow as tf
 
 def string_length_tf(t):
-  return tf.py_func(len, [t], [tf.int64])
+  return tf.py_func(len, [t], [tf.int64])  ###### CHANGED tf.py_function to tf.contrib.eager.py_func()
 
 class MonodepthDataloader(object):
     """monodepth dataloader"""
@@ -28,11 +28,10 @@ class MonodepthDataloader(object):
         self.left_image_batch  = None
         self.right_image_batch = None
 
-        input_queue = tf.train.string_input_producer([filenames_file], shuffle=False)
-        line_reader = tf.TextLineReader()
+        input_queue = tf.train.string_input_producer([filenames_file], shuffle=False) # this function is depricated!
+        line_reader = tf.TextLineReader() # THIS IS IMPORTANT and will be deprecated soon! change this
         _, line = line_reader.read(input_queue)
-
-        split_line = tf.string_split([line]).values
+        split_line = tf.string_split([line]).values # seperate image pairs at the space! (one space per line)
 
         # we load only one image for test, except if we trained a stereo model
         if mode == 'test' and not self.params.do_stereo:
@@ -43,6 +42,7 @@ class MonodepthDataloader(object):
             right_image_path = tf.string_join([self.data_path, split_line[1]])
             left_image_o  = self.read_image(left_image_path)
             right_image_o = self.read_image(right_image_path)
+            #print(left_image_path, left_image_o.shape, right_image_path, right_image_o.shape)
 
         if mode == 'train':
             # randomly flip images
@@ -60,8 +60,11 @@ class MonodepthDataloader(object):
             # capacity = min_after_dequeue + (num_threads + a small safety margin) * batch_size
             min_after_dequeue = 2048
             capacity = min_after_dequeue + 4 * params.batch_size
-            self.left_image_batch, self.right_image_batch = tf.train.shuffle_batch([left_image, right_image],
-                        params.batch_size, capacity, min_after_dequeue, params.num_threads)
+            try:
+                self.left_image_batch, self.right_image_batch = tf.train.shuffle_batch([left_image, right_image],
+                            params.batch_size, capacity, min_after_dequeue, params.num_threads, allow_smaller_final_batch=True)
+            except OutOfRangeError:
+                pass
 
         elif mode == 'test':
             self.left_image_batch = tf.stack([left_image_o,  tf.image.flip_left_right(left_image_o)],  0)
@@ -100,7 +103,7 @@ class MonodepthDataloader(object):
         path_length = string_length_tf(image_path)[0]
         file_extension = tf.substr(image_path, path_length - 3, 3)
         file_cond = tf.equal(file_extension, 'jpg')
-        
+
         image  = tf.cond(file_cond, lambda: tf.image.decode_jpeg(tf.read_file(image_path)), lambda: tf.image.decode_png(tf.read_file(image_path)))
 
         # if the dataset is cityscapes, we crop the last fifth to remove the car hood
